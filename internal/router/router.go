@@ -14,6 +14,8 @@ func SetupRouter() *gin.Engine {
 		k8sGroup := v1.Group("/k8s")
 		{
 			k8sGroup.GET("/pod", controller.GetPodListHandler)
+			k8sGroup.POST("/pod", controller.CreateOrUpdatePod)
+
 			k8sGroup.GET("/namespace", controller.GetNamespace)
 		}
 	}
