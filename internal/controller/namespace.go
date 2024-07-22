@@ -6,9 +6,9 @@ import (
 )
 
 func GetNamespace(c *gin.Context) {
-	err := logic.GetNamespace()
+	err, namespaceList := logic.GetNamespaceList()
 	if err != nil {
 		return
 	}
-	ResponseSuccess(c, nil)
+	ResponseSuccess(c, namespaceList)
 }
