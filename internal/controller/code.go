@@ -10,6 +10,7 @@ const (
 	CodeCreatePodError
 	CodeGetPodDetailError
 	CodeGetPodListError
+	CodeGetNodeListError
 )
 
 var codeMsgMap = map[RespCode]string{
@@ -19,7 +20,8 @@ var codeMsgMap = map[RespCode]string{
 	CodeInvalidParameter:  "Some key parameters have not been set.",
 	CodeCreatePodError:    "Fail to create a Pod",
 	CodeGetPodDetailError: "Fail to get the pod's information.",
-	CodeGetPodListError:   "Fail to get a list of pod,",
+	CodeGetPodListError:   "Fail to get a list of pods",
+	CodeGetNodeListError: "Fail to get a list of nodes.",
 }
 
 func (r RespCode) Msg() string {

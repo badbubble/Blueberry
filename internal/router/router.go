@@ -14,12 +14,16 @@ func SetupRouter() *gin.Engine {
 	{
 		k8sGroup := v1.Group("/k8s")
 		{
+			// namespace
+			k8sGroup.GET("/namespace", controller.GetNamespace)
+			// pod
 			k8sGroup.GET("/pod", controller.GetPodHandler)
 			k8sGroup.POST("/pod", controller.CreatePodHandler)
 			k8sGroup.DELETE("/pod", controller.DeletePodHandler)
 			k8sGroup.PUT("/pod", controller.UpdatePodHandler)
 
-			k8sGroup.GET("/namespace", controller.GetNamespace)
+			// node
+			k8sGroup.GET("/node", controller.GetNodeHandler)
 		}
 	}
 	return r
