@@ -44,17 +44,15 @@ func UpdatePodHandler(c *gin.Context) {
 }
 
 func DeletePodHandler(c *gin.Context) {
-	pod := &model.Pod{}
+	namespace := c.Query("namespace")
+	name := c.Query("name")
 
-	if err := c.ShouldBind(pod); err != nil {
-		ResponseErrorWithMsg(c, CodeParameterError, err.Error())
+	if namespace == "" || name == "" {
+		ResponseError(c, CodeInvalidParameter)
 		return
 	}
-	if err := validate.PodCreate(pod); err != nil {
-		ResponseErrorWithMsg(c, CodeInvalidParameter, err.Error())
-		return
-	}
-	if err := logic.DeletePod(pod); err != nil {
+
+	if err := logic.DeletePod(namespace, name); err != nil {
 		ResponseErrorWithMsg(c, CodeCreatePodError, err.Error())
 		return
 	}
@@ -64,6 +62,11 @@ func DeletePodHandler(c *gin.Context) {
 func GetPodHandler(c *gin.Context) {
 	namespace := c.Query("namespace")
 	name := c.Query("name")
+
+	if namespace == "" {
+		ResponseError(c, CodeInvalidParameter)
+		return
+	}
 
 	// get a pod's detail in a namespace
 	if name != "" {

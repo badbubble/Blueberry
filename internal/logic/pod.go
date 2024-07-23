@@ -23,9 +23,9 @@ func CreatePod(pod *model.Pod) error {
 	return nil
 }
 
-func DeletePod(pod *model.Pod) error {
+func DeletePod(namespace string, name string) error {
 	ctx := context.TODO()
-	err := k8s.Client.CoreV1().Pods(pod.Base.Namespace).Delete(ctx, pod.Base.Name, metav1.DeleteOptions{})
+	err := k8s.Client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
@@ -33,7 +33,7 @@ func DeletePod(pod *model.Pod) error {
 }
 
 func UpdatePod(pod *model.Pod) error {
-	if err := DeletePod(pod); err != nil {
+	if err := DeletePod(pod.Base.Namespace, pod.Base.Name); err != nil {
 		return err
 	}
 	ctx := context.TODO()
