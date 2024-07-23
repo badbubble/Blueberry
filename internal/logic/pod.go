@@ -81,3 +81,19 @@ func GetPodDetail(namespace string, name string) (*model.Pod, error) {
 	pod.ConvertToPod(k8sPod)
 	return pod, nil
 }
+
+func GetPodList(namespace string) ([]*model.PodItem, error) {
+	podItemList := make([]*model.PodItem, 0)
+
+	ctx := context.TODO()
+	podList, err := k8s.Client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range podList.Items {
+		podItem := &model.PodItem{}
+		podItem.Convert(&item)
+		podItemList = append(podItemList, podItem)
+	}
+	return podItemList, nil
+}

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -148,6 +149,35 @@ type Pod struct {
 	NetWorking     NetWorking  `json:"netWorking"`
 	InitContainers []Container `json:"initContainers"`
 	Containers     []Container `json:"containers"`
+}
+
+// PodItem saves essential information of a pod
+type PodItem struct {
+	Name     string `json:"name"`
+	Ready    string `json:"ready"`
+	Status   string `json:"status"`
+	Restarts int32  `json:"restarts"`
+	Age      int64  `json:"age"`
+	IP       string `json:"IP"`
+	Node     string `json:"node"`
+}
+
+func (pi *PodItem) Convert(pod *corev1.Pod) {
+	var totalContainer, readyContainer, restartContainer int32
+	for _, status := range pod.Status.ContainerStatuses {
+		if status.Ready {
+			readyContainer += 1
+		}
+		totalContainer += 1
+		restartContainer += status.RestartCount
+	}
+	pi.Name = pod.Name
+	pi.Ready = fmt.Sprintf("%d/%d", readyContainer, totalContainer)
+	pi.Status = string(pod.Status.Phase)
+	pi.Restarts = restartContainer
+	pi.IP = pod.Status.PodIP
+	pi.Age = pod.CreationTimestamp.Unix()
+	pi.Node = pod.Spec.NodeName
 }
 
 func (p *Pod) ConvertToK8s() *corev1.Pod {

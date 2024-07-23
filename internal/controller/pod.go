@@ -4,25 +4,8 @@ import (
 	"Blueberry/internal/logic"
 	"Blueberry/internal/model"
 	"Blueberry/internal/validate"
-	"Blueberry/pkg/k8s"
-	"context"
-	"fmt"
 	"github.com/gin-gonic/gin"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-func GetPodListHandler(c *gin.Context) {
-	ctx := context.TODO()
-	list, err := k8s.Client.CoreV1().Pods("").List(ctx, v1.ListOptions{})
-	if err != nil {
-		ResponseErrorWithMsg(c, CodeServerBusy, "require list pod error")
-		return
-	}
-	for _, item := range list.Items {
-		fmt.Printf("%s, %s\n", item.Namespace, item.Name)
-	}
-	ResponseSuccess(c, nil)
-}
 
 func CreatePodHandler(c *gin.Context) {
 	pod := &model.Pod{}
@@ -78,12 +61,26 @@ func DeletePodHandler(c *gin.Context) {
 	ResponseSuccess(c, nil)
 }
 
-func GetPodDetailHandler(c *gin.Context) {
-	namespace := c.Param("namespace")
+func GetPodHandler(c *gin.Context) {
+	namespace := c.Query("namespace")
 	name := c.Query("name")
-	pod, err := logic.GetPodDetail(namespace, name)
-	if err != nil {
-		ResponseError(c, CodeGetPodDetailError)
+
+	// get a pod's detail in a namespace
+	if name != "" {
+		pod, err := logic.GetPodDetail(namespace, name)
+		if err != nil {
+			ResponseError(c, CodeGetPodDetailError)
+			return
+		}
+		ResponseSuccess(c, pod)
+		return
 	}
-	ResponseSuccess(c, pod)
+	// get pod list in a namespace
+	podList, err := logic.GetPodList(namespace)
+	if err != nil {
+		ResponseError(c, CodeGetPodListError)
+		return
+	}
+	ResponseSuccess(c, podList)
+	return
 }
