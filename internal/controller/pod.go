@@ -24,7 +24,7 @@ func GetPodListHandler(c *gin.Context) {
 	ResponseSuccess(c, nil)
 }
 
-func CreateOrUpdatePod(c *gin.Context) {
+func CreatePodHandler(c *gin.Context) {
 	pod := &model.Pod{}
 
 	if err := c.ShouldBind(pod); err != nil {
@@ -40,4 +40,50 @@ func CreateOrUpdatePod(c *gin.Context) {
 		return
 	}
 	ResponseSuccess(c, nil)
+}
+
+func UpdatePodHandler(c *gin.Context) {
+	pod := &model.Pod{}
+
+	if err := c.ShouldBind(pod); err != nil {
+		ResponseErrorWithMsg(c, CodeParameterError, err.Error())
+		return
+	}
+	if err := validate.PodCreate(pod); err != nil {
+		ResponseErrorWithMsg(c, CodeInvalidParameter, err.Error())
+		return
+	}
+	if err := logic.UpdatePod(pod); err != nil {
+		ResponseErrorWithMsg(c, CodeCreatePodError, err.Error())
+		return
+	}
+	ResponseSuccess(c, nil)
+}
+
+func DeletePodHandler(c *gin.Context) {
+	pod := &model.Pod{}
+
+	if err := c.ShouldBind(pod); err != nil {
+		ResponseErrorWithMsg(c, CodeParameterError, err.Error())
+		return
+	}
+	if err := validate.PodCreate(pod); err != nil {
+		ResponseErrorWithMsg(c, CodeInvalidParameter, err.Error())
+		return
+	}
+	if err := logic.DeletePod(pod); err != nil {
+		ResponseErrorWithMsg(c, CodeCreatePodError, err.Error())
+		return
+	}
+	ResponseSuccess(c, nil)
+}
+
+func GetPodDetailHandler(c *gin.Context) {
+	namespace := c.Param("namespace")
+	name := c.Query("name")
+	pod, err := logic.GetPodDetail(namespace, name)
+	if err != nil {
+		ResponseError(c, CodeGetPodDetailError)
+	}
+	ResponseSuccess(c, pod)
 }

@@ -26,7 +26,7 @@ const (
 )
 
 const (
-	VOLUME_EMPTYDIR = "emptyDir"
+	VolumeEmptyDir = "emptyDir"
 )
 
 type ListMapItem struct {
@@ -174,6 +174,209 @@ func (p *Pod) ConvertToK8s() *corev1.Pod {
 	}
 }
 
+func (p *Pod) ConvertToPod(k8sPod *corev1.Pod) {
+	podLabels := make([]ListMapItem, 0)
+	for k, v := range k8sPod.Labels {
+		podLabels = append(podLabels, ListMapItem{
+			Key:   k,
+			Value: v,
+		})
+	}
+
+	p.Base = Base{
+		Name:          k8sPod.Name,
+		Labels:        podLabels,
+		Namespace:     k8sPod.Namespace,
+		RestartPolicy: string(k8sPod.Spec.RestartPolicy),
+	}
+
+	hostAliases := make([]ListMapItem, 0)
+	for _, alias := range k8sPod.Spec.HostAliases {
+		hostAliases = append(hostAliases, ListMapItem{
+			Key:   alias.IP,
+			Value: strings.Join(alias.Hostnames, ","),
+		})
+	}
+
+	var dnsConfig DnsConfig
+	if k8sPod.Spec.DNSConfig != nil {
+		dnsConfig.Nameservers = k8sPod.Spec.DNSConfig.Nameservers
+	}
+
+	p.NetWorking = NetWorking{
+		HostNetwork: k8sPod.Spec.HostNetwork,
+		HostName:    k8sPod.Spec.Hostname,
+		DnsPolicy:   string(k8sPod.Spec.DNSPolicy),
+		DnsConfig:   dnsConfig,
+		HostAliases: hostAliases,
+	}
+
+	p.Volumes = p.ConvertVolumes(k8sPod)
+	p.Containers = p.ConvertContainers(k8sPod, false)
+	p.InitContainers = p.ConvertContainers(k8sPod, true)
+
+}
+
+func (p *Pod) ConvertVolumes(k8sPod *corev1.Pod) []Volume {
+	volumeList := make([]Volume, 0)
+	for _, v := range k8sPod.Spec.Volumes {
+		if v.EmptyDir == nil {
+			continue
+		}
+		volumeList = append(volumeList, Volume{
+			Name: v.Name,
+			Type: VolumeEmptyDir,
+		})
+	}
+	return volumeList
+}
+
+func (p *Pod) ConvertContainerPorts(containerPortList []corev1.ContainerPort) []ContainerPort {
+	portList := make([]ContainerPort, 0)
+	for _, port := range containerPortList {
+		portList = append(portList, ContainerPort{
+			Name:          port.Name,
+			ContainerPort: port.ContainerPort,
+			HostPort:      port.HostPort,
+		})
+	}
+	return portList
+}
+
+func (p *Pod) ConvertContainers(k8sPod *corev1.Pod, init bool) []Container {
+	containerList := make([]Container, 0)
+	var k8sContainers []corev1.Container
+	if init {
+		k8sContainers = k8sPod.Spec.InitContainers
+	} else {
+		k8sContainers = k8sPod.Spec.Containers
+	}
+	for _, container := range k8sContainers {
+		containerList = append(containerList, Container{
+			Name:            container.Name,
+			Image:           container.Image,
+			ImagePullPolicy: string(container.ImagePullPolicy),
+			Tty:             container.TTY,
+			Ports:           p.ConvertContainerPorts(container.Ports),
+			WorkingDir:      container.WorkingDir,
+			Command:         container.Command,
+			Args:            container.Args,
+			Envs:            p.ConvertContainerEnv(container.Env),
+			Privileged:      p.ConvertContainerPrivileged(container.SecurityContext),
+			Resources:       p.ConvertContainerResources(container.Resources),
+			VolumeMounts:    p.ConvertContainerVolumeMounts(container.VolumeMounts),
+			StartupProbe:    p.ConvertContainerProbe(container.StartupProbe),
+			LivenessProbe:   p.ConvertContainerProbe(container.LivenessProbe),
+			ReadinessProbe:  p.ConvertContainerProbe(container.ReadinessProbe),
+		})
+	}
+	return containerList
+}
+
+func (p *Pod) ConvertContainerProbe(k8sProbe *corev1.Probe) ContainerProbe {
+	probe := ContainerProbe{
+		Enable:    false,
+		Type:      "",
+		HttpGet:   ProbeHttpGet{},
+		Exec:      ProbeCommand{},
+		TcpSocket: ProbeTcpSocket{},
+		ProbeTime: ProbeTime{},
+	}
+	if k8sProbe == nil {
+		return probe
+	} else {
+		probe.Enable = true
+	}
+	if k8sProbe.Exec != nil {
+		probe.Type = EXECProbe
+		probe.Exec.Command = k8sProbe.Exec.Command
+	} else if k8sProbe.HTTPGet != nil {
+		probe.Type = HTTPProbe
+		httpGet := k8sProbe.HTTPGet
+		headersReq := make([]ListMapItem, 0)
+		for _, headerK8s := range httpGet.HTTPHeaders {
+			headersReq = append(headersReq, ListMapItem{
+				Key:   headerK8s.Name,
+				Value: headerK8s.Value,
+			})
+		}
+		probe.HttpGet = ProbeHttpGet{
+			Host:        httpGet.Host,
+			Port:        httpGet.Port.IntVal,
+			Scheme:      string(httpGet.Scheme),
+			Path:        httpGet.Path,
+			HttpHeaders: headersReq,
+		}
+	} else if k8sProbe.TCPSocket != nil {
+		probe.Type = TCPProbe
+		probe.TcpSocket = ProbeTcpSocket{
+			Host: k8sProbe.TCPSocket.Host,
+			Port: k8sProbe.TCPSocket.Port.IntVal,
+		}
+	} else {
+		probe.Type = HTTPProbe
+	}
+
+	probe.InitialDelaySeconds = k8sProbe.InitialDelaySeconds
+	probe.PeriodSeconds = k8sProbe.PeriodSeconds
+	probe.TimeoutSeconds = k8sProbe.TimeoutSeconds
+	probe.SuccessThreshold = k8sProbe.SuccessThreshold
+	probe.FailureThreshold = k8sProbe.FailureThreshold
+
+	return probe
+}
+
+func (p *Pod) ConvertContainerVolumeMounts(volumeMountsK8s []corev1.VolumeMount) []VolumeMount {
+	volumesReq := make([]VolumeMount, 0)
+	for _, item := range volumeMountsK8s {
+
+		volumesReq = append(volumesReq, VolumeMount{
+			MountName: item.Name,
+			MountPath: item.MountPath,
+			ReadOnly:  item.ReadOnly,
+		})
+
+	}
+	return volumesReq
+}
+
+func (p *Pod) ConvertContainerPrivileged(pr *corev1.SecurityContext) (privileged bool) {
+	if pr != nil {
+		privileged = *pr.Privileged
+	}
+	return
+}
+
+func (p *Pod) ConvertContainerEnv(containerEnvList []corev1.EnvVar) []EnvVar {
+	envList := make([]EnvVar, 0)
+	for _, envVar := range containerEnvList {
+		envList = append(envList, EnvVar{
+			Key:  envVar.Name,
+			Name: envVar.Value,
+		})
+	}
+	return envList
+}
+
+func (p *Pod) ConvertContainerResources(requirements corev1.ResourceRequirements) Resources {
+	reqResources := Resources{
+		Enable: false,
+	}
+	requests := requirements.Requests
+	limits := requirements.Limits
+	if requests != nil {
+		reqResources.Enable = true
+		reqResources.CpuRequest = int32(requests.Cpu().MilliValue())
+		reqResources.MemRequest = int32(requests.Memory().Value() / (1024 * 1024))
+	}
+	if limits != nil {
+		reqResources.Enable = true
+		reqResources.CpuLimit = int32(limits.Cpu().MilliValue())
+		reqResources.MemLimit = int32(limits.Memory().Value() / (1024 * 1024))
+	}
+	return reqResources
+}
+
 func (p *Pod) GetHostAliases() []corev1.HostAlias {
 	hostAliases := make([]corev1.HostAlias, 0)
 	for _, alias := range p.NetWorking.HostAliases {
@@ -188,7 +391,7 @@ func (p *Pod) GetHostAliases() []corev1.HostAlias {
 func (p *Pod) GetVolumes() []corev1.Volume {
 	volumes := make([]corev1.Volume, 0)
 	for _, volume := range p.Volumes {
-		if volume.Type != VOLUME_EMPTYDIR {
+		if volume.Type != VolumeEmptyDir {
 			continue
 		}
 		source := corev1.VolumeSource{
