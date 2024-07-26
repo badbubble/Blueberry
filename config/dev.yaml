@@ -4,7 +4,7 @@
 
 log:
   level: "info"
-  filename: "blueberry.log"
+  filename: "Blueberry.log"
   max_size: 200
   max_age: 30
   max_backups: 7

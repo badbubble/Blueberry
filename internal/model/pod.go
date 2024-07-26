@@ -30,6 +30,13 @@ const (
 	VolumeEmptyDir = "emptyDir"
 )
 
+const (
+	ScheduleNodeName     = "nodeName"
+	ScheduleNodeSelector = "nodeSelector"
+	ScheduleAffinity     = "nodeAffinity"
+	ScheduleAny          = "nodeAny"
+)
+
 type ListMapItem struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
@@ -143,12 +150,27 @@ type Container struct {
 	ReadinessProbe  ContainerProbe       `json:"readinessProbe"`
 }
 
+type NodeScheduling struct {
+	Type         string                       `json:"type"`
+	NodeName     string                       `json:"nodeName"`
+	NodeSelector []ListMapItem                `json:"nodeSelector"`
+	NodeAffinity []NodeSelectorTermExpression `json:"nodeAffinity"`
+}
+
+type NodeSelectorTermExpression struct {
+	Key      string `json:"key"`
+	Operator corev1.NodeSelectorOperator
+	Value    string `json:"value"`
+}
+
 type Pod struct {
-	Base           Base        `json:"base"`
-	Volumes        []Volume    `json:"volumes"`
-	NetWorking     NetWorking  `json:"netWorking"`
-	InitContainers []Container `json:"initContainers"`
-	Containers     []Container `json:"containers"`
+	Base           Base                `json:"base"`
+	Tolerations    []corev1.Toleration `json:"tolerations"`
+	NodeScheduling NodeScheduling      `json:"nodeScheduling"`
+	Volumes        []Volume            `json:"volumes"`
+	NetWorking     NetWorking          `json:"netWorking"`
+	InitContainers []Container         `json:"initContainers"`
+	Containers     []Container         `json:"containers"`
 }
 
 // PodItem saves essential information of a pod
@@ -178,9 +200,11 @@ func (pi *PodItem) Convert(pod *corev1.Pod) {
 	pi.IP = pod.Status.PodIP
 	pi.Age = pod.CreationTimestamp.Unix()
 	pi.Node = pod.Spec.NodeName
+
 }
 
 func (p *Pod) ConvertToK8s() *corev1.Pod {
+	affinity, selectorMap, nodeName := p.GetScheduling()
 	return &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
@@ -189,6 +213,10 @@ func (p *Pod) ConvertToK8s() *corev1.Pod {
 			Labels:    p.GetLabels(),
 		},
 		Spec: corev1.PodSpec{
+			Tolerations:    p.Tolerations,
+			Affinity:       affinity,
+			NodeName:       nodeName,
+			NodeSelector:   selectorMap,
 			Volumes:        p.GetVolumes(),
 			InitContainers: p.GetContainers(true),
 			Containers:     p.GetContainers(false),
@@ -202,6 +230,45 @@ func (p *Pod) ConvertToK8s() *corev1.Pod {
 		},
 		Status: corev1.PodStatus{},
 	}
+}
+
+func (p *Pod) GetScheduling() (affinity *corev1.Affinity, selectorMap map[string]string, nodeName string) {
+	switch p.NodeScheduling.Type {
+	case ScheduleNodeName:
+		nodeName = p.NodeScheduling.NodeName
+		return
+	case ScheduleNodeSelector:
+		selectorMap = make(map[string]string)
+		for _, item := range p.NodeScheduling.NodeSelector {
+			selectorMap[item.Key] = item.Value
+		}
+		return
+	case ScheduleAffinity:
+		matchExpression := make([]corev1.NodeSelectorRequirement, 0)
+		for _, expression := range p.NodeScheduling.NodeAffinity {
+			matchExpression = append(matchExpression, corev1.NodeSelectorRequirement{
+				Key:      expression.Key,
+				Operator: expression.Operator,
+				Values:   strings.Split(expression.Value, ","),
+			})
+		}
+		affinity = &corev1.Affinity{
+			NodeAffinity: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{
+						{
+							MatchExpressions: matchExpression,
+						},
+					},
+				},
+			},
+		}
+		return
+	case ScheduleAny:
+	default:
+
+	}
+	return
 }
 
 func (p *Pod) ConvertToPod(k8sPod *corev1.Pod) {
@@ -244,7 +311,43 @@ func (p *Pod) ConvertToPod(k8sPod *corev1.Pod) {
 	p.Volumes = p.ConvertVolumes(k8sPod)
 	p.Containers = p.ConvertContainers(k8sPod, false)
 	p.InitContainers = p.ConvertContainers(k8sPod, true)
+	p.Tolerations = k8sPod.Spec.Tolerations
+	p.ConvertAffinity(k8sPod)
+}
 
+func (p *Pod) ConvertAffinity(k8sPod *corev1.Pod) {
+	p.NodeScheduling = NodeScheduling{}
+	if k8sPod.Spec.NodeSelector != nil {
+		p.NodeScheduling.Type = ScheduleNodeSelector
+		p.NodeScheduling.NodeSelector = make([]ListMapItem, 0)
+		for k, v := range k8sPod.Spec.NodeSelector {
+			p.NodeScheduling.NodeSelector =
+				append(p.NodeScheduling.NodeSelector, ListMapItem{Key: k, Value: v})
+		}
+		return
+	}
+	if k8sPod.Spec.NodeName != "" {
+		p.NodeScheduling.Type = ScheduleNodeName
+		p.NodeScheduling.NodeName = k8sPod.Spec.NodeName
+		return
+	}
+
+	if k8sPod.Spec.Affinity != nil {
+		p.NodeScheduling.Type = ScheduleAffinity
+		term := k8sPod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms[0]
+		ExpressionList := make([]NodeSelectorTermExpression, 0)
+		for _, expression := range term.MatchExpressions {
+			ExpressionList = append(ExpressionList, NodeSelectorTermExpression{
+				Key:      expression.Key,
+				Operator: expression.Operator,
+				Value:    strings.Join(expression.Values, ","),
+			})
+		}
+		p.NodeScheduling.NodeAffinity = ExpressionList
+		return
+	}
+	p.NodeScheduling.Type = ScheduleAny
+	return
 }
 
 func (p *Pod) ConvertVolumes(k8sPod *corev1.Pod) []Volume {
