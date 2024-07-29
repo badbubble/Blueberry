@@ -37,10 +37,10 @@ const (
 	ScheduleAny          = "nodeAny"
 )
 
-type ListMapItem struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
-}
+const (
+	EnvConfigMapType = "configMap"
+	EnvSecretType    = "secretType"
+)
 
 type Base struct {
 	Name          string        `json:"name"`
@@ -119,12 +119,12 @@ type ContainerPort struct {
 }
 
 type EnvVar struct {
-	Key     string `json:"key"`
 	Name    string `json:"name"`
 	RefName string `json:"refName"`
 	Value   string `json:"value"`
 	Type    string `json:"type"`
 }
+
 type EnvVarFromResource struct {
 	Name    string `json:"name"`
 	RefType string `json:"refType"`
@@ -395,6 +395,7 @@ func (p *Pod) ConvertContainers(k8sPod *corev1.Pod, init bool) []Container {
 			Command:         container.Command,
 			Args:            container.Args,
 			Envs:            p.ConvertContainerEnv(container.Env),
+			EnvsFrom:        p.ConvertContainerEnvFrom(container.EnvFrom),
 			Privileged:      p.ConvertContainerPrivileged(container.SecurityContext),
 			Resources:       p.ConvertContainerResources(container.Resources),
 			VolumeMounts:    p.ConvertContainerVolumeMounts(container.VolumeMounts),
@@ -483,12 +484,47 @@ func (p *Pod) ConvertContainerPrivileged(pr *corev1.SecurityContext) (privileged
 func (p *Pod) ConvertContainerEnv(containerEnvList []corev1.EnvVar) []EnvVar {
 	envList := make([]EnvVar, 0)
 	for _, envVar := range containerEnvList {
-		envList = append(envList, EnvVar{
-			Key:  envVar.Name,
-			Name: envVar.Value,
-		})
+		envVarItem := EnvVar{
+			Name: envVar.Name,
+		}
+
+		if envVar.ValueFrom != nil {
+			if envVar.ValueFrom.SecretKeyRef != nil {
+				envVarItem.Type = EnvSecretType
+				envVarItem.Value = envVar.ValueFrom.SecretKeyRef.Key
+				envVarItem.RefName = envVar.ValueFrom.SecretKeyRef.Name
+			}
+			if envVar.ValueFrom.ConfigMapKeyRef != nil {
+				envVarItem.Type = EnvConfigMapType
+				envVarItem.Value = envVar.ValueFrom.ConfigMapKeyRef.Key
+				envVarItem.RefName = envVar.ValueFrom.ConfigMapKeyRef.Name
+			}
+		} else {
+			envVarItem.Value = envVar.Value
+		}
+
+		envList = append(envList, envVarItem)
 	}
 	return envList
+}
+
+func (p *Pod) ConvertContainerEnvFrom(ContainerEnvFrom []corev1.EnvFromSource) []EnvVarFromResource {
+	result := make([]EnvVarFromResource, 0)
+	for _, source := range ContainerEnvFrom {
+		singleItem := EnvVarFromResource{
+			Prefix: source.Prefix,
+		}
+		if source.ConfigMapRef != nil {
+			singleItem.Name = source.ConfigMapRef.Name
+			singleItem.RefType = EnvConfigMapType
+		}
+		if source.SecretRef != nil {
+			singleItem.Name = source.SecretRef.Name
+			singleItem.RefType = EnvSecretType
+		}
+		result = append(result, singleItem)
+	}
+	return result
 }
 
 func (p *Pod) ConvertContainerResources(requirements corev1.ResourceRequirements) Resources {
@@ -563,6 +599,7 @@ func (p *Pod) GetContainers(init bool) []corev1.Container {
 			WorkingDir:      container.WorkingDir,
 			Ports:           container.GetPorts(),
 			Env:             container.GetEnv(),
+			EnvFrom:         container.GetEnvFrom(),
 			Resources:       container.GetResources(),
 			ImagePullPolicy: corev1.PullPolicy(container.ImagePullPolicy),
 			SecurityContext: &corev1.SecurityContext{Privileged: &container.Privileged},
@@ -578,14 +615,60 @@ func (p *Pod) GetContainers(init bool) []corev1.Container {
 
 func (c *Container) GetEnv() []corev1.EnvVar {
 	envs := make([]corev1.EnvVar, 0)
+
 	for _, e := range c.Envs {
-		envs = append(envs, corev1.EnvVar{
-			Name:      e.Key,
-			Value:     e.Value,
-			ValueFrom: nil,
-		})
+		singleValue := corev1.EnvVar{
+			Name: e.Name,
+		}
+		switch e.Type {
+		case EnvSecretType:
+			singleValue.ValueFrom = &corev1.EnvVarSource{
+				ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+					Key: e.Value,
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: e.RefName,
+					},
+				},
+			}
+			break
+		case EnvConfigMapType:
+			singleValue.ValueFrom = &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					Key:                  e.Value,
+					LocalObjectReference: corev1.LocalObjectReference{Name: e.RefName},
+				},
+			}
+			break
+		default:
+			singleValue.Value = e.Value
+		}
+
+		envs = append(envs, singleValue)
 	}
 	return envs
+}
+
+func (c *Container) GetEnvFrom() []corev1.EnvFromSource {
+	result := make([]corev1.EnvFromSource, 0)
+
+	for _, fromResource := range c.EnvsFrom {
+		k8sFromResource := corev1.EnvFromSource{}
+		k8sFromResource.Prefix = fromResource.Prefix
+		switch fromResource.RefType {
+		case EnvSecretType:
+			k8sFromResource.SecretRef = &corev1.SecretEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{Name: fromResource.Name},
+			}
+			break
+		case EnvConfigMapType:
+			k8sFromResource.ConfigMapRef = &corev1.ConfigMapEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{Name: fromResource.Name},
+			}
+			break
+		}
+		result = append(result, k8sFromResource)
+	}
+	return result
 }
 
 func (c *Container) GetVolumeMounts() []corev1.VolumeMount {

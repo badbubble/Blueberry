@@ -13,7 +13,13 @@ Deploying machine learning models on GPU-based Kubernetes at scale.
   * [x] Get Node's detail
   * [x] Taints
   * [x] Affnity
-* [ ] ConfigMap & Secret
+* [x] ConfigMap & Secret
+  * [x] Get ConfigMaps' list
+  * [x] Get ConfigMaps detail
+  * [x] Create ConfigMap
+  * [x] Delete ConfigMap
+  * [x] Update pods' configuration
+  
 * [ ] Volume Storage Management
 * [ ] Service Discovery
 * [ ] Workload Management

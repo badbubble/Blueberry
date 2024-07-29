@@ -32,6 +32,19 @@ func SetupRouter() *gin.Engine {
 			k8sGroup.GET("/node", controller.GetNodeHandler)
 			k8sGroup.PUT("/node/labels", controller.UpdateNodeLabelsHandler)
 			k8sGroup.PUT("/node/taints", controller.UpdateNodeTaintsHandler)
+
+			// configMap
+			k8sGroup.GET("/configmap", controller.GetConfigMapHandler)
+			k8sGroup.POST("/configmap", controller.CreateConfigMapHandler)
+			k8sGroup.PUT("/configmap", controller.UpdateConfigMapHandler)
+			k8sGroup.DELETE("/configmap", controller.DeleteConfigMapHandler)
+
+			// secret
+			k8sGroup.GET("/secret", controller.GetSecretHandler)
+			k8sGroup.POST("/secret", controller.CreateSecretHandler)
+			k8sGroup.PUT("/secret", controller.UpdateSecretHandler)
+			k8sGroup.DELETE("/secret", controller.DeleteSecretHandler)
+
 		}
 	}
 	return r
