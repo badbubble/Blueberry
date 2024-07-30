@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import './NodeList.css';
+import { Table, Spin, Alert } from 'antd';
 
 const NodeList = () => {
   const [nodes, setNodes] = useState([]);
@@ -23,46 +23,65 @@ const NodeList = () => {
   }, []);
 
   if (loading) {
-    return <div>Loading...</div>;
+    return <Spin tip="Loading..." />;
   }
 
   if (error) {
-    return <div>Error: {error.message}</div>;
+    return <Alert message="Error" description={error.message} type="error" showIcon />;
   }
 
+  const columns = [
+    {
+      title: 'Name',
+      dataIndex: 'name',
+      key: 'name',
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+    },
+    {
+      title: 'Age',
+      dataIndex: 'age',
+      key: 'age',
+    },
+    {
+      title: 'Internal IP',
+      dataIndex: 'internalIp',
+      key: 'internalIp',
+    },
+    {
+      title: 'External IP',
+      dataIndex: 'externalIp',
+      key: 'externalIp',
+    },
+    {
+      title: 'Version',
+      dataIndex: 'version',
+      key: 'version',
+    },
+    {
+      title: 'OS Image',
+      dataIndex: 'osImage',
+      key: 'osImage',
+    },
+    {
+      title: 'Kernel Version',
+      dataIndex: 'kernelVersion',
+      key: 'kernelVersion',
+    },
+    {
+      title: 'Container Runtime',
+      dataIndex: 'containerRuntime',
+      key: 'containerRuntime',
+    },
+  ];
+
   return (
-    <div className="node-list">
-      <h1>K8S Node List</h1>
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Status</th>
-            <th>Age</th>
-            <th>Internal IP</th>
-            <th>External IP</th>
-            <th>Version</th>
-            <th>OS Image</th>
-            <th>Kernel Version</th>
-            <th>Container Runtime</th>
-          </tr>
-        </thead>
-        <tbody>
-          {nodes.map((node) => (
-            <tr key={node.name}>
-              <td>{node.name}</td>
-              <td>{node.status}</td>
-              <td>{node.age}</td>
-              <td>{node.internalIp}</td>
-              <td>{node.externalIp}</td>
-              <td>{node.version}</td>
-              <td>{node.osImage}</td>
-              <td>{node.kernelVersion}</td>
-              <td>{node.containerRuntime}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div style={{ padding: '20px' }}>
+      <h1 style={{ textAlign: 'center' }}>K8S Node List</h1>
+      <Table dataSource={nodes} columns={columns} rowKey="name" />
     </div>
   );
 };
